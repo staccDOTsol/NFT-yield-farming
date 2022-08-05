@@ -85,9 +85,6 @@ contract("NFTYieldFarming on BSC", function(accounts) {
             nftYieldFarming = await NFTYieldFarming.new(GOVERNANCE_TOKEN, _devaddr, _governanceTokenPerBlock, _startBlock, _bonusEndBlock, { from: deployer });
             NFT_YIELD_FARMING = nftYieldFarming.address;
             console.log('\n=== NFT_YIELD_FARMING ===', NFT_YIELD_FARMING);
-        });
-
-        it("Transfer ownership of the Governance token (BEP20) contract to the NFTYieldFarming contract", async () => {
             /// [Test]: Mint
             // const _mintAmount = web3.utils.toWei('100', 'ether');
             // await governanceToken.mint(user1, _mintAmount, { from: deployer});

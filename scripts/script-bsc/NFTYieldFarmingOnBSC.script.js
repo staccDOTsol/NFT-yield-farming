@@ -2,7 +2,7 @@
 const Web3 = require('web3');
 //const web3 = new Web3('https://data-seed-prebsc-2-s1.binance.org:8545'); /// [Note]: Endpoing is the BSC testnet (original)
 //const provider = new Web3.providers.HttpProvider('https://data-seed-prebsc-2-s1.binance.org:8545');  /// [Note]: 503 Error
-const provider = new Web3.providers.HttpProvider('https://data-seed-prebsc-1-s2.binance.org:8545');    /// [Note]: New RPC Endpoint
+const provider = new Web3.providers.HttpProvider('https://data-seed-prebsc-2-s1.binance.org:8545');    /// [Note]: New RPC Endpoint
 const web3 = new Web3(provider);
 
 /// Artifact of smart contracts 

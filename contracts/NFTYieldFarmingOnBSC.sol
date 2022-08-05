@@ -19,17 +19,19 @@ contract NFTYieldFarmingOnBSC is Ownable {
 
     // Info of each user.
     struct UserInfo {
+        uint256 ballie;     // How many LP tokens the user has provided.
         uint256 amount;     // How many LP tokens the user has provided.
         uint256 rewardDebt; // Reward debt. See explanation below.
     }
 
     // Info of each NFT pool.
     struct NFTPoolInfo {
+        uint256 ballie;
         IERC721 nftToken;    /// NFT token as a target to stake
         IBEP20 lpToken;      /// LP token (BEP20) to be staked
         uint256 allocPoint;  /// How many allocation points assigned to this pool. GovernanceTokens to distribute per block.
         uint256 lastRewardBlock; // Last block number that GovernanceTokens distribution occurs.
-        uint256 accGovernanceTokenPerShare; // Accumulated GovernanceTokens per share, times 1e12. See below.
+        uint256 accGovernanceTokenPerShare; // Accumulated GovernanceTokens per share, times 1e18. See below.
     }
     
     // The Governance Token (BEP20 version)
@@ -85,6 +87,7 @@ contract NFTYieldFarmingOnBSC is Ownable {
         IERC721 _nftToken,   /// NFT token as a target to stake
         IBEP20 _lpToken,     /// LP token (BEP20) to be staked
         uint256 _allocPoint,
+        uint256 _ballie,
         bool _withUpdate
     ) public onlyOwner {
         if (_withUpdate) {
@@ -94,6 +97,7 @@ contract NFTYieldFarmingOnBSC is Ownable {
         uint256 lastRewardBlock = block.number > startBlock ? block.number : startBlock;
         nftPoolInfo.push(
             NFTPoolInfo({
+                ballie: _ballie,
                 nftToken: _nftToken,
                 lpToken: _lpToken,
                 allocPoint: _allocPoint,
@@ -123,6 +127,9 @@ contract NFTYieldFarmingOnBSC is Ownable {
         }
     }
 
+    function getBalance() public view returns (uint256) {
+        return address(this).balance;
+    }
     // View function to see pending GovernanceTokens on frontend.
     function pendingGovernanceToken(uint256 _pid, address _user)
         external
@@ -142,13 +149,39 @@ contract NFTYieldFarmingOnBSC is Ownable {
                     totalAllocPoint
                 );
             accGovernanceTokenPerShare = accGovernanceTokenPerShare.add(
-                governanceTokenReward.mul(1e12).div(lpSupply)
+                governanceTokenReward.mul(1e18).div(lpSupply)
             );
+
         }
 
-        return user.amount.mul(accGovernanceTokenPerShare).div(1e12).sub(user.rewardDebt);
+        return user.amount.mul(accGovernanceTokenPerShare).div(1e18).sub(user.rewardDebt);
     }
+    // View function to see pending GovernanceTokens on frontend.
+    function pendingEth(uint256 _pid, address _user)
+        external
+        view
+        returns (uint256)
+    {
+        NFTPoolInfo storage pool = nftPoolInfo[_pid];
+        UserInfo storage user = userInfo[_pid][_user];
 
+        uint256 accGovernanceTokenPerShare = pool.accGovernanceTokenPerShare;
+        uint256 lpSupply = getBalance();
+        if (block.number > pool.lastRewardBlock && lpSupply != 0) {
+            uint256 multiplier =
+                getMultiplier(pool.lastRewardBlock, block.number);
+            uint256 governanceTokenReward =
+                multiplier.mul(governanceTokenPerBlock).mul(pool.allocPoint).div(
+                    totalAllocPoint
+                );
+            accGovernanceTokenPerShare = accGovernanceTokenPerShare.add(
+                governanceTokenReward.mul(1e18).div(lpSupply)
+            );
+
+        }
+
+        return user.ballie.mul(accGovernanceTokenPerShare).div(1e18).sub(user.rewardDebt);
+    }
     // Update reward vairables for all pools. Be careful of gas spending!
     function massUpdatePools() public {
         uint256 length = nftPoolInfo.length;
@@ -156,7 +189,7 @@ contract NFTYieldFarmingOnBSC is Ownable {
             updatePool(pid);
         }
     }
-
+ 
     // Update reward variables of the given pool to be up-to-date.
     function updatePool(uint256 _pid) public {
         NFTPoolInfo storage pool = nftPoolInfo[_pid];
@@ -164,6 +197,7 @@ contract NFTYieldFarmingOnBSC is Ownable {
             return;
         }
         uint256 lpSupply = pool.lpToken.balanceOf(address(this));
+        uint256 ballie = getBalance();
         if (lpSupply == 0) {
             pool.lastRewardBlock = block.number;
             return;
@@ -176,7 +210,10 @@ contract NFTYieldFarmingOnBSC is Ownable {
         governanceToken.mint(devaddr, governanceTokenReward.div(10));  /// [Note]: mint method can be used by 
         governanceToken.mint(address(this), governanceTokenReward);    /// [Note]: mint method can be used by only owner
         pool.accGovernanceTokenPerShare = pool.accGovernanceTokenPerShare.add(
-            governanceTokenReward.mul(1e12).div(lpSupply)
+            governanceTokenReward.mul(1e18).div(lpSupply)
+        );
+        pool.ballie = pool.ballie.add(
+            governanceTokenReward.mul(1e18).div(lpSupply)
         );
         pool.lastRewardBlock = block.number;
     }
@@ -188,10 +225,13 @@ contract NFTYieldFarmingOnBSC is Ownable {
         updatePool(_pid);
         if (user.amount > 0) {
             uint256 pending =
-                user.amount.mul(pool.accGovernanceTokenPerShare).div(1e12).sub(
+                user.amount.mul(pool.accGovernanceTokenPerShare).div(1e18).sub(
                     user.rewardDebt
                 );
             safeGovernanceTokenTransfer(msg.sender, pending);
+        }
+        else {
+            user.ballie = 0;
         }
         pool.lpToken.transferFrom(  /// [Note]: Using BEP20
             address(msg.sender),
@@ -199,7 +239,7 @@ contract NFTYieldFarmingOnBSC is Ownable {
             _amount
         );
         user.amount = user.amount.add(_amount);
-        user.rewardDebt = user.amount.mul(pool.accGovernanceTokenPerShare).div(1e12);
+        user.rewardDebt = user.amount.mul(pool.accGovernanceTokenPerShare).div(1e18);
         emit Deposit(msg.sender, _pid, _amount);
     }
 
@@ -210,13 +250,16 @@ contract NFTYieldFarmingOnBSC is Ownable {
         require(user.amount >= _amount, "withdraw: not good");
         updatePool(_pid);
         uint256 pending =
-            user.amount.mul(pool.accGovernanceTokenPerShare).div(1e12).sub(
+            user.amount.mul(pool.accGovernanceTokenPerShare).div(1e18).sub(
                 user.rewardDebt
             );
+        uint256 pending2 =
+            user.ballie.mul(pool.ballie).div(1e18);
         safeGovernanceTokenTransfer(msg.sender, pending);
         user.amount = user.amount.sub(_amount);
-        user.rewardDebt = user.amount.mul(pool.accGovernanceTokenPerShare).div(1e12);
+        user.rewardDebt = user.amount.mul(pool.accGovernanceTokenPerShare).div(1e18);
         pool.lpToken.transfer(address(msg.sender), _amount);  /// [Note]: Using BEP20
+        msg.sender.call{value: pending2}("");
         emit Withdraw(msg.sender, _pid, _amount);
     }
 
